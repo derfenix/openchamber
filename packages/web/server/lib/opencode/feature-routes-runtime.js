@@ -131,6 +131,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       getOwnPorts,
       devServerScanner,
       buildAugmentedPath,
+      projectShellEnvResolver,
       projectConfigRuntime,
       projectContextRuntime,
       agentMemoryRuntime,
@@ -354,7 +355,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       openchamberDataDir,
     });
     registerProjectContextRoutes(app, { projectContextRuntime });
-    registerProjectSetupRoutes(app, { projectConfigRuntime });
+    registerProjectSetupRoutes(app, { projectConfigRuntime, projectShellEnvResolver });
     registerAgentMemoryRoutes(app, { agentMemoryRuntime, isAgentMemoryEnabled });
     registerSessionKnowledgeRoutes(app, { sessionKnowledgeRuntime });
 
@@ -375,6 +376,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       resolveGitBinaryForSpawn,
       openchamberUserConfigRoot,
       managedChatsRoot,
+      projectShellEnvResolver,
     });
   };
 

@@ -82,7 +82,12 @@ personal file:
   parser accepts `devenv print-dev-env --json` (`variables.NAME.value`),
   `direnv export json` (a flat object), `export NAME=value`, dotenv lines, and
   NUL-separated `env -0` output. Unrecognized output is an empty environment,
-  never an error.
+  never an error. The typed devenv shape is the derivation's whole environment,
+  so only `type: "exported"` entries are adopted, and the Nix build sandbox's
+  own identity — `HOME=/homeless-shelter`, `NIX_BUILD_TOP`, and a
+  `TMP`/`TMPDIR`/`TEMP`/`TEMPDIR` pointing at it — is dropped rather than
+  following every spawn. devenv's shell hook repairs those values for a shell;
+  a spawn gets no hook, so OpenChamber drops them.
 - `vars` are literal `NAME=value` overrides that win over parsed values.
 - `mode` is `overlay` (default) or `replace`. In `overlay`, PATH-like keys
   (`PATH`, `CDPATH`, `*_PATH`) are prepended, deduplicated, so system tools

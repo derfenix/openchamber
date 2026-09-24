@@ -86,14 +86,49 @@ export const shellEnvToStored = (value) => {
   return stored;
 };
 
+// `nix print-dev-env --json` (`variables.NAME = { type, value }`) reports the
+// derivation's whole environment, not just what a dev shell exports.
+// `exported` is the only type that belongs in a child environment; `var`,
+// `internal`, `array`, and `unknown` are the builder's own shell state (IFS,
+// PS4, hook arrays) and adopting them would leak into every spawn.
+const isExportedEntry = (entry) => isObjectRecord(entry) && entry.type === 'exported';
+
+// That same derivation environment carries the Nix build sandbox's runtime
+// identity: HOME points at `/homeless-shelter` and the temp directories at
+// `NIX_BUILD_TOP`. devenv's own shell hook repairs these when it enters a
+// shell; a plain spawn gets no such hook, so adopting them would follow every
+// Git call, terminal, and Project Action and break tools that write under them
+// (Go's build work dir, an interactive shell's own rc). Drop them, but only the
+// sandbox values, so a project that genuinely sets its own HOME or TMPDIR keeps
+// it. The temp names mirror devenv's hook.
+const NIX_SANDBOX_HOME = '/homeless-shelter';
+const SANDBOX_TEMP_VARIABLES = ['TMP', 'TMPDIR', 'TEMP', 'TEMPDIR'];
+const stripNixBuildSandboxVars = (vars) => {
+  const buildTop = vars.NIX_BUILD_TOP;
+  delete vars.NIX_BUILD_TOP;
+  if (vars.HOME === NIX_SANDBOX_HOME) delete vars.HOME;
+  if (buildTop === undefined) return vars;
+  for (const name of SANDBOX_TEMP_VARIABLES) {
+    if (vars[name] === buildTop) delete vars[name];
+  }
+  return vars;
+};
+
 const extractJsonVariables = (parsed, out) => {
   // devenv `print-dev-env --json`: { variables: { NAME: { type, value } } }.
-  const source = isObjectRecord(parsed.variables) ? parsed.variables : parsed;
+  const typedSource = isObjectRecord(parsed.variables) ? parsed.variables : null;
+  const source = typedSource ?? parsed;
   if (!isObjectRecord(source)) return;
+  if (typedSource) {
+    for (const [key, entry] of Object.entries(source)) {
+      if (!SHELL_ENV_VAR_NAME_PATTERN.test(key) || !isExportedEntry(entry)) continue;
+      if (isString(entry.value)) out[key] = entry.value;
+    }
+    return;
+  }
   for (const [key, entry] of Object.entries(source)) {
-    if (!SHELL_ENV_VAR_NAME_PATTERN.test(key)) continue;
-    const value = isObjectRecord(entry) ? entry.value : entry;
-    if (isString(value)) out[key] = value;
+    if (!SHELL_ENV_VAR_NAME_PATTERN.test(key) || !isString(entry)) continue;
+    out[key] = entry;
   }
 };
 
@@ -154,7 +189,7 @@ export const parseShellEnvOutput = (stdout, baseEnv = null) => {
       const parsed = JSON.parse(trimmed);
       if (isObjectRecord(parsed)) {
         extractJsonVariables(parsed, out);
-        if (Object.keys(out).length > 0) return out;
+        if (Object.keys(out).length > 0) return stripNixBuildSandboxVars(out);
       }
     } catch {
       // Not JSON after all; fall through to line parsing.
@@ -163,10 +198,10 @@ export const parseShellEnvOutput = (stdout, baseEnv = null) => {
 
   if (text.includes('\0')) {
     for (const chunk of text.split('\0')) parseAssignment(chunk, out, baseEnv);
-    return out;
+    return stripNixBuildSandboxVars(out);
   }
   for (const line of text.split(/\r?\n/)) parseAssignment(line, out, baseEnv);
-  return out;
+  return stripNixBuildSandboxVars(out);
 };
 
 const isPathLikeKey = (key) => {

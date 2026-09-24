@@ -77,20 +77,57 @@ const createFixture = async ({ shellEnv = null, stdout = '', code = 0, neverClos
 };
 
 describe('parseShellEnvOutput', () => {
-  it('parses devenv print-dev-env --json', () => {
+  it('parses devenv print-dev-env --json, keeping only exported variables', () => {
     const output = JSON.stringify({
       variables: {
         PATH: { type: 'exported', value: '/nix/store/a/bin:/usr/bin' },
         GOFLAGS: { type: 'exported', value: '-mod=vendor' },
-        IGNORED: { type: 'internal', value: '' },
+        IFS: { type: 'var', value: ' \t\n' },
+        outputs: { type: 'internal', value: '' },
+        hookList: { type: 'array', value: '[]' },
+        unknowable: { type: 'unknown', value: 'x' },
       },
       bashFunctions: { hello: 'echo hi' },
     });
     expect(parseShellEnvOutput(output)).toEqual({
       PATH: '/nix/store/a/bin:/usr/bin',
       GOFLAGS: '-mod=vendor',
-      IGNORED: '',
     });
+  });
+
+  it('drops the Nix build sandbox home and temp directories from devenv output', () => {
+    const output = JSON.stringify({
+      variables: {
+        PATH: { type: 'exported', value: '/dev/bin' },
+        HOME: { type: 'exported', value: '/homeless-shelter' },
+        NIX_BUILD_TOP: { type: 'exported', value: '/build' },
+        TMPDIR: { type: 'exported', value: '/build' },
+        TMP: { type: 'exported', value: '/build' },
+        TEMP: { type: 'exported', value: '/build' },
+        TEMPDIR: { type: 'exported', value: '/build' },
+      },
+    });
+    expect(parseShellEnvOutput(output)).toEqual({ PATH: '/dev/bin' });
+  });
+
+  it('keeps a real home and a project temp directory', () => {
+    const output = JSON.stringify({
+      variables: {
+        HOME: { type: 'exported', value: '/home/dev' },
+        TMPDIR: { type: 'exported', value: '/home/dev/scratch' },
+        NIX_BUILD_TOP: { type: 'exported', value: '/build' },
+        TMP: { type: 'exported', value: '/build' },
+      },
+    });
+    expect(parseShellEnvOutput(output)).toEqual({
+      HOME: '/home/dev',
+      TMPDIR: '/home/dev/scratch',
+    });
+  });
+
+  it('drops a sandbox temp directory from flat JSON output too', () => {
+    expect(parseShellEnvOutput('{"NIX_BUILD_TOP":"/build","TMPDIR":"/build","FOO":"bar"}'))
+      .toEqual({ FOO: 'bar' });
   });
 
   it('parses a flat direnv export json object', () => {

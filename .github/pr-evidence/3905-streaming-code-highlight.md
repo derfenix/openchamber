@@ -2,7 +2,7 @@
 
 Packaged desktop build (`bun run electron:build`, macOS 27, Apple Silicon, Electron 43.7) built from the tree of this pull request, launched in an isolated home with the fixture provider from `scripts/perf/fixture-provider.mjs` as its only model. The optimisations were switched off and on through their localStorage switches on the same build, alternating, with `bun run profile:session -- --attach 9333 --process-cpu-only` opening each session in the app window over CDP. "off" is the behaviour of `main`; "on" is this pull request.
 
-Percent of one core. "Renderer" is the Chromium renderer process; "All" sums every Electron process (renderer, GPU, main process hosting the server, network service) plus the managed OpenCode process. Run-to-run spread on an unchanged build is one to three points of renderer CPU. A run is valid when the session reported idle, the stream rendered in the window, and the assistant response was present.
+Percent of one core. "Renderer" is the Chromium renderer process; "All" sums every Electron process (renderer, GPU, main process hosting the server, network service) plus the managed OpenCode process. Two runs of the same variant usually differ by about one point of renderer CPU and by up to five in the worst case (the code block at 300 chars/s), so a difference smaller than that is noise. A run is valid when the session reported idle, the stream rendered in the window, and the assistant response was present.
 
 | Scenario | Runs | Renderer off → on | Renderer p90 off → on | All Electron processes off → on |
 |---|---|---|---|---|

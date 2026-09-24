@@ -11,6 +11,9 @@ active:
   - type: local
     branch: local/devenv
     note: keep the local devenv setup out of git; never retire this one
+  - type: feat
+    branch: feat/shell-env
+    pr: https://github.com/openchamber/openchamber/pull/3943
 ```
 
 ## Entry format

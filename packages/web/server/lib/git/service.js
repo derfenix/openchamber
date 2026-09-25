@@ -139,11 +139,34 @@ const isSafeSimpleGitBinary = (candidate) => (
   typeof candidate === 'string' && SIMPLE_GIT_SAFE_BINARY_PATTERN.test(candidate)
 );
 
-const createSimpleGit = (options) => {
-  if (!options?.unsafe?.allowUnsafeCustomBinary) {
-    return simpleGit(options);
-  }
+// simple-git only reads `env` through its `.env()` builder method, not as a
+// constructor option: an `env` passed to `simpleGit()` is silently ignored, so
+// git and its hooks run on the server's `process.env` and never see the project
+// shell environment, SSH_AUTH_SOCK, or GIT_TERMINAL_PROMPT. `.env()` also runs
+// simple-git's safety check over the environment, which rejects variables that
+// configure git itself (EDITOR, PAGER, GIT_SSH, ...). Those never reached git
+// before this call and OpenChamber runs git non-interactively, so they are
+// dropped rather than turning on the matching allowUnsafe* options.
+const SIMPLE_GIT_UNSAFE_ENV_KEYS = new Set([
+  'EDITOR', 'VISUAL', 'GIT_EDITOR', 'GIT_SEQUENCE_EDITOR',
+  'PAGER', 'GIT_PAGER',
+  'GIT_ASKPASS', 'SSH_ASKPASS',
+  'GIT_SSH', 'GIT_SSH_COMMAND', 'GIT_PROXY_COMMAND',
+  'GIT_EXTERNAL_DIFF',
+  'GIT_TEMPLATE_DIR', 'GIT_EXEC_PATH',
+  'GIT_CONFIG', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM',
+  'PREFIX',
+]);
 
+const sanitizeGitSpawnEnv = (env) => {
+  const sanitized = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (!SIMPLE_GIT_UNSAFE_ENV_KEYS.has(key.toUpperCase())) sanitized[key] = value;
+  }
+  return sanitized;
+};
+
+const suppressSimpleGitUnsafeBinaryWarning = (create) => {
   const originalWarn = console.warn;
   console.warn = (...args) => {
     if (String(args[0] || '').includes(SIMPLE_GIT_UNSAFE_BINARY_WARNING)) {
@@ -153,10 +176,20 @@ const createSimpleGit = (options) => {
   };
 
   try {
-    return simpleGit(options);
+    return create();
   } finally {
     console.warn = originalWarn;
   }
+};
+
+const createSimpleGit = (options) => {
+  const git = options?.unsafe?.allowUnsafeCustomBinary
+    ? suppressSimpleGitUnsafeBinaryWarning(() => simpleGit(options))
+    : simpleGit(options);
+  if (options?.env) {
+    git.env(sanitizeGitSpawnEnv(options.env));
+  }
+  return git;
 };
 
 const listPathExecutableCandidates = (binaryName) => {

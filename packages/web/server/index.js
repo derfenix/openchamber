@@ -585,6 +585,12 @@ const projectShellEnvResolver = createProjectShellEnvResolver({
   createProjectIdFromPath,
   projectConfigFileStemOf,
   spawn,
+  // The command runs at spawn time with the same augmented PATH a terminal
+  // gets. A packaged server (systemd user unit) starts with a minimal PATH
+  // that has no devenv, direnv, or nix, so resolving with `process.env` alone
+  // would silently return no environment. A getter keeps the login-shell probe
+  // lazy; `buildAugmentedPath` is initialized below.
+  baseEnv: () => ({ ...process.env, PATH: buildAugmentedPath() }),
 });
 // Git functions are module-level, so the resolver is registered once here.
 setGitProjectShellEnvResolver(projectShellEnvResolver);

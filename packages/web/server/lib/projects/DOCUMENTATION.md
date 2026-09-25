@@ -114,7 +114,12 @@ Runs the command once per directory, caches the result for
 `PROJECT_SHELL_ENV_TTL_MS` (60 s), dedupes concurrent resolutions, and never
 blocks a spawn for more than `PROJECT_SHELL_ENV_TIMEOUT_MS` (15 s). Any
 failure — missing config, disabled, non-zero exit, timeout, unparseable output
-— resolves to `null` and the spawn proceeds on its base environment. Values in
+— resolves to `null` and the spawn proceeds on its base environment. The
+command runs with the same augmented PATH a terminal gets (`buildAugmentedPath`
+in the composition root), not the server's own `process.env.PATH`: a packaged
+server runs under a systemd user unit whose minimal PATH has no `devenv`,
+`direnv`, or `nix`, so resolving with `process.env` alone would silently find
+nothing. `baseEnv` is a getter, so that login-shell probe stays lazy. Values in
 `export NAME=value` output are read literally (`$VAR` is not expanded;
 `devenv`/`direnv` JSON carries final values). A config write calls
 `invalidateProject(projectId)`, which also invalidates worktrees that inherit

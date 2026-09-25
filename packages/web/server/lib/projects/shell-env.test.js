@@ -40,7 +40,7 @@ const createFakeSpawn = ({ stdout = '', code = 0, neverClose = false } = {}) => 
  * A resolver over a real temp projects dir. The project config file exists so
  * the directory walk finds the owner; `readShellEnvForProject` is injected.
  */
-const createFixture = async ({ shellEnv = null, stdout = '', code = 0, neverClose = false, ttlMs = 60_000 } = {}) => {
+const createFixture = async ({ shellEnv = null, stdout = '', code = 0, neverClose = false, ttlMs = 60_000, baseEnv = () => ({ PATH: '/usr/bin', HOME: '/home/test' }) } = {}) => {
   const projectsDir = await mkdtemp(path.join(os.tmpdir(), 'oc-shell-env-'));
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'oc-shell-project-'));
   const projectId = createProjectIdFromPath(projectRoot);
@@ -58,7 +58,7 @@ const createFixture = async ({ shellEnv = null, stdout = '', code = 0, neverClos
     },
     createProjectIdFromPath,
     spawn: spawnFixture.spawn,
-    baseEnv: { PATH: '/usr/bin', HOME: '/home/test' },
+    baseEnv,
     timeoutMs: 25,
     ttlMs,
   });
@@ -263,6 +263,26 @@ describe('createProjectShellEnvResolver', () => {
     }
   });
 
+  it('reads baseEnv lazily from a getter at spawn time', async () => {
+    let reads = 0;
+    const fixture = await createFixture({
+      shellEnv: { enabled: true, command: 'fake', vars: {}, mode: 'overlay' },
+      stdout: 'FOO=bar\n',
+      baseEnv: () => {
+        reads += 1;
+        return { PATH: '/from-getter' };
+      },
+    });
+    try {
+      expect(reads).toBe(0);
+      await fixture.resolver.resolveForDirectory(fixture.projectRoot);
+      expect(reads).toBe(1);
+      expect(fixture.calls[0].options.env.PATH).toBe('/from-getter');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('returns null when no ancestor project config exists', async () => {
     const fixture = await createFixture({ shellEnv: { enabled: true, command: '', vars: { FOO: 'bar' }, mode: 'overlay' } });
     const orphan = await mkdtemp(path.join(os.tmpdir(), 'oc-orphan-'));
@@ -302,7 +322,7 @@ describe('createProjectShellEnvResolver', () => {
       readShellEnvForProject: async (id) => (id === primaryId ? { enabled: true, command: 'fake', vars: {}, mode: 'overlay' } : null),
       createProjectIdFromPath,
       spawn: spawnFixture.spawn,
-      baseEnv: { PATH: '/usr/bin' },
+      baseEnv: () => ({ PATH: '/usr/bin' }),
       timeoutMs: 100,
     });
     try {
@@ -337,7 +357,7 @@ describe('createProjectShellEnvResolver', () => {
       },
       createProjectIdFromPath,
       spawn: spawnFixture.spawn,
-      baseEnv: { PATH: '/usr/bin' },
+      baseEnv: () => ({ PATH: '/usr/bin' }),
       timeoutMs: 100,
     });
     try {

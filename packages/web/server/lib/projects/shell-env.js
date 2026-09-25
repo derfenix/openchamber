@@ -306,7 +306,7 @@ const runCommandWithTimeout = ({ spawn, command, cwd, env, timeoutMs }) => new P
  *   - `fsPromises`, `path`, `projectsDirPath`: to locate the owning project.
  *   - `readShellEnvForProject(projectId)`: the personal `shellEnv` (or null).
  *   - `createProjectIdFromPath`, `projectConfigFileStemOf`: id/naming rules.
- *   - `spawn`, `baseEnv`: to run the command.
+ *   - `spawn`, `baseEnv()` (called at spawn time): to run the command.
  * The resolver never throws at a spawn: any failure resolves to `null`.
  */
 export const createProjectShellEnvResolver = (dependencies) => {
@@ -318,7 +318,7 @@ export const createProjectShellEnvResolver = (dependencies) => {
     createProjectIdFromPath,
     projectConfigFileStemOf = (projectId) => projectId,
     spawn,
-    baseEnv = process.env,
+    baseEnv = () => process.env,
     timeoutMs = PROJECT_SHELL_ENV_TIMEOUT_MS,
     ttlMs = PROJECT_SHELL_ENV_TTL_MS,
     now = Date.now,
@@ -436,18 +436,19 @@ export const createProjectShellEnvResolver = (dependencies) => {
   };
 
   const computeResolved = async (target) => {
+    const currentBaseEnv = baseEnv();
     let commandVars = {};
     if (target.shellEnv.command) {
       const output = await runCommandWithTimeout({
         spawn,
         command: target.shellEnv.command,
         cwd: target.executionRoot,
-        env: { ...baseEnv },
+        env: { ...currentBaseEnv },
         timeoutMs,
       });
       // A failing or overrunning command leaves the spawn on its base env.
       if (output === null) return null;
-      commandVars = parseShellEnvOutput(output, baseEnv);
+      commandVars = parseShellEnvOutput(output, currentBaseEnv);
     }
 
     // Explicitly configured variables win over parsed output, so a user can
